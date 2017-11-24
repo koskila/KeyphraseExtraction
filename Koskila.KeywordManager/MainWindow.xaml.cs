@@ -41,7 +41,6 @@ namespace Koskila.KeywordManager
         private string path_extractableFile = @"D:\\temp\\testfile";
 
         // These keys are for posti@koskila.net
-        //private string key1 = "5a35dd2c4563458da1947540d47647f4";
         private string key1 = "01f9d674626e45338efef1a1ee9bdbb5";
 
         private int maxSentenceLength = 25000;
