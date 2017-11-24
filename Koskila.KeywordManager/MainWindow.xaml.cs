@@ -36,6 +36,18 @@ namespace Koskila.KeywordManager
     /// </summary>
     public partial class MainWindow : Window
     {
+
+        private string url_topics = "https://westus.api.cognitive.microsoft.com/text/analytics/v2.0/keyPhrases";
+        private string path_extractableFile = @"D:\\temp\\testfile";
+
+        // These keys are for posti@koskila.net
+        //private string key1 = "5a35dd2c4563458da1947540d47647f4";
+        private string key1 = "01f9d674626e45338efef1a1ee9bdbb5";
+
+        private int maxSentenceLength = 25000;
+
+        bool useWastefulLogic = false;
+
         public MainWindow()
         {
             InitializeComponent();
@@ -62,17 +74,6 @@ namespace Koskila.KeywordManager
             //view.SortDescriptions.Add(new SortDescription("Title", ListSortDirection.Ascending));
             //view.SortDescriptions.Add(new SortDescription("score", ListSortDirection.Ascending));
         }
-
-        private string url_topics = "https://westus.api.cognitive.microsoft.com/text/analytics/v2.0/keyPhrases";
-        private string path_extractableFile = @"D:\\temp\\testfile";
-
-        // These keys are for posti@koskila.net
-        //private string key1 = "5a35dd2c4563458da1947540d47647f4";
-        private string key1 = "01f9d674626e45338efef1a1ee9bdbb5";
-
-        private int maxSentenceLength = 25000;
-
-        bool useWastefulLogic = false;
 
         private void button_OK_Click(object sender, RoutedEventArgs e)
         {
