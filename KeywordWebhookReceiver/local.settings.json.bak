@@ -1,0 +1,12 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "",
+    "AzureWebJobsDashboard": "",
+    "SiteUrl": "https://simedev.sharepoint.com/sites/Testteam/",
+    "UserName": "koskila@simedev.onmicrosoft.com",
+    "Password": "",
+    "CognitiveServicesAPIkey": "",
+    "ListName": "Documents"
+  }
+}

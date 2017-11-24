@@ -9,7 +9,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Linguistics.Sample", "Lingu
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LinguisticsClient", "ClientLibrary\LinguisticsClient.csproj", "{8388E984-34E1-443D-9F04-D588DC4BBB22}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KeywordWebhookReceiver", "KeywordWebhookReceiver\KeywordWebhookReceiver.csproj", "{0D7FA160-4B4B-448D-8867-F6931242E478}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "KeywordWebhookReceiver", "KeywordWebhookReceiver\KeywordWebhookReceiver.csproj", "{0D7FA160-4B4B-448D-8867-F6931242E478}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
