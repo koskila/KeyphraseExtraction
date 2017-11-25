@@ -6,6 +6,8 @@ local.settings.json
 
 # App Config files
 App.config
+app.config
+*\App.config
 
 # User-specific files
 *.suo
