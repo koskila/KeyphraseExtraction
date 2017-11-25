@@ -20,6 +20,8 @@ using System.IO;
 using Newtonsoft.Json;
 using System.Threading;
 
+using System.Configuration;
+
 //using System.Web.Helpers;
 
 using TikaOnDotNet.TextExtraction;
@@ -38,10 +40,9 @@ namespace Koskila.KeywordManager
     {
 
         private string url_topics = "https://westus.api.cognitive.microsoft.com/text/analytics/v2.0/keyPhrases";
-        private string path_extractableFile = @"D:\\temp\\testfile";
+        private string path_extractableFile = System.Configuration.ConfigurationManager.AppSettings[""];
 
-        // These keys are for posti@koskila.net
-        private string key1 = "01f9d674626e45338efef1a1ee9bdbb5";
+        private string key1 = System.Configuration.ConfigurationManager.AppSettings[""];
 
         private int maxSentenceLength = 25000;
 
