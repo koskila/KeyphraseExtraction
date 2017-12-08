@@ -30,7 +30,7 @@ namespace KeywordWebhookReceiver
         public static readonly string password = System.Configuration.ConfigurationManager.AppSettings["SPO_Password"];
         public static readonly string listName = System.Configuration.ConfigurationManager.AppSettings["SPO_ListName"];
 
-        private static readonly string[] terms = new string[] { "test term 3", "lol test 3" };
+        private static readonly string[] terms = new string[] { "test term 4", "lol test 4" };
 
         [FunctionName("HttpTriggerCSharp")]
         public static async Task<HttpResponseMessage> Run([HttpTrigger(AuthorizationLevel.Anonymous, "get", "post", Route = null)]HttpRequestMessage req, TraceWriter log)
@@ -207,7 +207,7 @@ namespace KeywordWebhookReceiver
                                         var field = list.GetFields(fieldnames).First();
 
                                         // setting managed metadata
-                                        UpdateTaxonomyField(keyPhrases.Take(10).ToArray(), log, ctx, li, field);
+                                        UpdateManagedMetadata(keyPhrases.Take(10).ToArray(), log, ctx, li, field);
 
                                         ctx.ExecuteQuery();
                                     }
@@ -285,7 +285,7 @@ namespace KeywordWebhookReceiver
         private static int lcid = 1033;
         private static Guid wantedGuid = new Guid("b194954e-ba65-4a51-a5b8-c4f732573d24");
 
-        private static void UpdateTaxonomyField(string[] value, TraceWriter log, ClientContext ctx, ListItem item, Field field)
+        private static void UpdateManagedMetadata(string[] value, TraceWriter log, ClientContext ctx, ListItem item, Field field)
         {
             try
             {
@@ -345,24 +345,24 @@ namespace KeywordWebhookReceiver
 
                 //taxSession.UpdateCache();
 
-                var listItem = item.ParentList.GetItemById(item.Id);
-                ctx.Load(listItem);
+                //var listItem = item.ParentList.GetItemById(item.Id);
+                //ctx.Load(listItem);
 
-                //TaxonomyExtensions.
+                ////TaxonomyExtensions.
 
-                ctx.Load(taxSession);
-                ctx.Load(store);
-                ctx.Load(taxField);
-                ctx.Load(keywordTermSet);
+                //ctx.Load(taxSession);
+                //ctx.Load(store);
+                //ctx.Load(taxField);
+                //ctx.Load(keywordTermSet);
                 ctx.Load(item);
                 ctx.ExecuteQuery();
 
-                ClearTaxonomyFieldValue(ctx, item.ParentList, item, taxField.InternalName);
-                ctx.Load(item);
+                //ClearTaxonomyFieldValue(ctx, item.ParentList, item, taxField.InternalName);
+                //ctx.Load(item);
                 ctx.ExecuteQuery();
 
                 //UpdateTaxonomyField(ctx, item.ParentList, item, taxField.InternalName, terms[0].Value + "|" + terms[0].Key);
-                TaxonomyExtensions.SetTaxonomyFieldValues(listItem, taxField.Id, terms);
+                TaxonomyExtensions.SetTaxonomyFieldValues(item, taxField.Id, terms);
                 
                 //if (taxField.AllowMultipleValues)
                 //{
