@@ -30,7 +30,8 @@ namespace KeywordWebhookReceiver
         public static readonly string password = System.Configuration.ConfigurationManager.AppSettings["SPO_Password"];
         public static readonly string listName = System.Configuration.ConfigurationManager.AppSettings["SPO_ListName"];
 
-        private static readonly string[] terms = new string[] { "test term 4", "lol test 4" };
+        //private static readonly string[] terms = new string[] { "test term 4", "lol test 4" };
+        private static readonly string[] terms = new string[] { };
 
         [FunctionName("HttpTriggerCSharp")]
         public static async Task<HttpResponseMessage> Run([HttpTrigger(AuthorizationLevel.Anonymous, "get", "post", Route = null)]HttpRequestMessage req, TraceWriter log)
@@ -343,54 +344,16 @@ namespace KeywordWebhookReceiver
                     terms.Add(new KeyValuePair<Guid, string>(term1.Id, term1.Name));
                 }
 
-                //taxSession.UpdateCache();
-
-                //var listItem = item.ParentList.GetItemById(item.Id);
-                //ctx.Load(listItem);
-
-                ////TaxonomyExtensions.
-
-                //ctx.Load(taxSession);
-                //ctx.Load(store);
-                //ctx.Load(taxField);
-                //ctx.Load(keywordTermSet);
                 ctx.Load(item);
                 ctx.ExecuteQuery();
-
-                //ClearTaxonomyFieldValue(ctx, item.ParentList, item, taxField.InternalName);
-                //ctx.Load(item);
-                ctx.ExecuteQuery();
-
-                //UpdateTaxonomyField(ctx, item.ParentList, item, taxField.InternalName, terms[0].Value + "|" + terms[0].Key);
-                TaxonomyExtensions.SetTaxonomyFieldValues(item, taxField.Id, terms);
                 
-                //if (taxField.AllowMultipleValues)
-                //{
-                //    var termValuesString = String.Empty;
-                //    foreach (var term in terms)
-                //    {
-                //        termValuesString += "-1;#" + term.Value + "|" + term.Key.ToString("D") + ";#";
-                //    }
-
-                //    termValuesString = termValuesString.Substring(0, termValuesString.Length - 2);
-
-                //    var newTaxFieldValue = new TaxonomyFieldValueCollection(ctx, termValuesString, taxField);
-                //    //taxField.SetFieldValueByValueCollection(item, newTaxFieldValue);
-                //    taxField.SetFieldValueByTerm(item, term1, lcid);
-
-                //    ctx.ExecuteQueryRetry();
-                //}
-                //else
-                //{
-                //    log.Info("You are trying to set multiple values in a single value field. Skipping values for field ");
-                //}
-
+                TaxonomyExtensions.SetTaxonomyFieldValues(item, taxField.Id, terms);
+               
                 item.Update();
             }
             catch (Exception ex)
             {
                 log.Error(ex.Message);
-                //throw;
             }
         }
 
