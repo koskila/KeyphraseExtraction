@@ -14,6 +14,7 @@ using System.Collections.Generic;
 using Microsoft.Azure.CognitiveServices.Language.TextAnalytics.Models;
 using Microsoft.Azure.CognitiveServices.Language.TextAnalytics;
 using System.Globalization;
+using Microsoft.SharePoint.Client.Taxonomy;
 
 namespace KeywordWebhookReceiver
 {
@@ -23,9 +24,9 @@ namespace KeywordWebhookReceiver
         // These keys are for posti@koskila.net
         public static readonly string key1 = System.Configuration.ConfigurationManager.AppSettings["CognitiveServicesAPIkey"];
 
-        public static readonly string userName = System.Configuration.ConfigurationManager.AppSettings["UserName"];
-        public static readonly string password = System.Configuration.ConfigurationManager.AppSettings["Password"];
-        public static readonly string listName = System.Configuration.ConfigurationManager.AppSettings["ListName"];
+        public static readonly string userName = System.Configuration.ConfigurationManager.AppSettings["SPO_UserName"];
+        public static readonly string password = System.Configuration.ConfigurationManager.AppSettings["SPO_Password"];
+        public static readonly string listName = System.Configuration.ConfigurationManager.AppSettings["SPO_ListName"];
 
 
         [FunctionName("HttpTriggerCSharp")]
@@ -71,8 +72,7 @@ namespace KeywordWebhookReceiver
             OfficeDevPnP.Core.AuthenticationManager authManager = new OfficeDevPnP.Core.AuthenticationManager();
             try
             {
-                // Get and set the client context  
-                // Connects to SharePoint online site using inputs provided  
+                // Connects to SharePoint online site
                 using (var ctx = authManager.GetSharePointOnlineAuthenticatedContextTenant(siteUrl, userName, password))
                 {
                     // List Name input  
@@ -81,7 +81,6 @@ namespace KeywordWebhookReceiver
                     if (list != null)
                     {
                         // Returns required result  
-
                         ListItem li = list.GetItemById(id);
 
                         ctx.Load(li);
@@ -91,6 +90,9 @@ namespace KeywordWebhookReceiver
                         Microsoft.SharePoint.Client.File file = li.File;
                         ctx.Load(file);
                         ctx.ExecuteQuery();
+
+                        var terms = new string[] { "test term", "lol test" };
+                        keyPhrases.AddRange(terms);
 
                         if (li.File.Name.IndexOf("pdf") >= 0)
                         {
@@ -110,31 +112,12 @@ namespace KeywordWebhookReceiver
 
                                     var fileRef = li.File.ServerRelativeUrl;
                                     var fileInfo = Microsoft.SharePoint.Client.File.OpenBinaryDirect(ctx, fileRef);
-                                    var fileName = Path.Combine("\\home\\site", (string)li.File.Name);
-
-                                    byte[] buffer = new byte[214748359]; //2147483591
-                                    int size = 0;
-                                    while (fileInfo.Stream.ReadByte() > 0) size++;
-
-                                    try
-                                    {
-                                        using (var fileStream = System.IO.File.Create(fileName))
-                                        {
-                                            fileInfo.Stream.CopyTo(fileStream);
-                                        }
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        //throw;
-                                    }
-
-                                    //var fileInfo = Microsoft.SharePoint.Client.File.OpenBinaryDirect(ctx, fileUrl);
                                     fileInfo = Microsoft.SharePoint.Client.File.OpenBinaryDirect(ctx, fileRef);
+
                                     using (var ms = new MemoryStream())
                                     {
                                         fileInfo.Stream.CopyTo(ms);
                                         byte[] fileContents = ms.ToArray();
-
 
                                         var extractor = new TikaOnDotNet.TextExtraction.TextExtractor();
                                         var extractionResult = extractor.Extract(fileContents);
@@ -145,7 +128,9 @@ namespace KeywordWebhookReceiver
                                         text = Regex.Replace(text, @"[^a-z.,!?]", " ", RegexOptions.IgnoreCase);
                                         text = Regex.Replace(text, @"( +)", " ");
 
-                                        log.Info("Extracted text!\r\n " + text);
+                                        int snippetEnd = 50 < text.Length ? 50 : text.Length;
+
+                                        log.Info("Extracted text! First few rows here.. \r\n " + text.Substring(0,snippetEnd));
 
                                         List<string> sentences = new List<string>();
                                         var RegEx_SentenceDelimiter = new Regex(@"(\.|\!|\?)");
@@ -179,34 +164,10 @@ namespace KeywordWebhookReceiver
                                             i++;
                                         }
 
-                                        var batch = new MultiLanguageBatchInput();
-                                        batch.Documents = analyzable;
-                                        
-
-                                        ITextAnalyticsAPI client = new TextAnalyticsAPI();
-                                        client.AzureRegion = AzureRegions.Westus;
-                                        client.SubscriptionKey = key1;
-                                        //client.
-
-                                        try
-                                        {
-                                            var result = client.KeyPhrases(batch);
-
-                                            foreach (var row in result.Documents)
-                                            {
-                                                foreach (var kp in row.KeyPhrases)
-                                                {
-                                                    keyPhrases.Add(kp);
-                                                }
-                                            }
-                                        }
-                                        catch (Exception ex)
-                                        {
-                                            //messages += ex.Message;
-                                            log.Warning(ex.Message);
-                                        }
+                                        if (keyPhrases.Count <= 0) RunTextAnalysis(ref keyPhrases, analyzable, log);
                                     }
 
+                                    log.Info("All found key phrases were: ");
                                     foreach (var kp in keyPhrases)
                                     {
                                         log.Info(kp);
@@ -219,21 +180,42 @@ namespace KeywordWebhookReceiver
                                         description += s + "\r\n";
                                     }
 
-                                    TextInfo ti = new CultureInfo("en-US", false).TextInfo;
+                                    try
+                                    {
+                                        TextInfo ti = new CultureInfo("en-US", false).TextInfo;
 
-                                    li["Title"] = ti.ToTitleCase(file.Name);
-                                    li["Description0"] = ti.ToTitleCase(description.ToLower());
+                                        li["Title"] = ti.ToTitleCase(file.Name);
+                                        li["Description0"] = ti.ToTitleCase(description.ToLower());
 
-                                    li.Update();
-                                    
-                                    // setting managed metadata
+                                        li.Update();
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        log.Error(ex.Message);
+                                    }
 
+                                    try
+                                    {
+                                        ctx.Load(list.Fields);
+                                        ctx.ExecuteQuery();
 
-                                    ctx.ExecuteQuery();
+                                        var fieldnames = new string[] { "Keywords" };
+                                        var field = list.GetFields(fieldnames).First();
+
+                                        // setting managed metadata
+                                        UpdateTaxonomyField(keyPhrases.Take(10).ToArray(), log, ctx, li, field);
+
+                                        ctx.ExecuteQuery();
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        log.Error(ex.Message);
+                                    }
+
                                 }
                                 catch (Exception ex)
                                 {
-                                    log.Info(ex.Message);
+                                    log.Error(ex.Message);
                                     return req.CreateResponse(HttpStatusCode.InternalServerError, ex.Message);
                                 }
                             }
@@ -266,6 +248,102 @@ namespace KeywordWebhookReceiver
             return name == null
                 ? req.CreateResponse(HttpStatusCode.BadRequest, "Please pass a name on the query string or in the request body")
                 : req.CreateResponse(HttpStatusCode.OK, "Hello " + name + "\r\n\r\n" + message);
+        }
+
+        private static void RunTextAnalysis(ref List<string> keyPhrases, List<MultiLanguageInput> analyzable, TraceWriter log)
+        {
+            var batch = new MultiLanguageBatchInput();
+            batch.Documents = analyzable;
+
+            ITextAnalyticsAPI client = new TextAnalyticsAPI();
+            client.AzureRegion = AzureRegions.Westus;
+            client.SubscriptionKey = key1;
+
+            try
+            {
+                var result = client.KeyPhrases(batch);
+
+                foreach (var row in result.Documents)
+                {
+                    foreach (var kp in row.KeyPhrases)
+                    {
+                        keyPhrases.Add(kp);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                //messages += ex.Message;
+                log.Warning(ex.Message);
+            }
+        }
+
+        private static void UpdateTaxonomyField(string[] value, TraceWriter log, ClientContext ctx, ListItem item, Field field)
+        {
+            //var value = values[key];
+            //if (value.GetType().IsArray)
+            //{
+                var taxSession = ctx.Site.GetTaxonomySession();
+                var terms = new List<KeyValuePair<Guid, string>>();
+                foreach (var arrayItem in value as object[])
+                {
+                    TaxonomyItem taxonomyItem;
+                    Guid termGuid = Guid.Empty;
+
+                    if (!Guid.TryParse(arrayItem as string, out termGuid))
+                    {
+                        // Assume it's a TermPath
+                        taxonomyItem = ctx.Site.GetTaxonomyItemByPath(arrayItem as string);
+                    }
+                    else
+                    {
+                        taxonomyItem = taxSession.GetTerm(termGuid);
+                        ctx.Load(taxonomyItem);
+                        ctx.ExecuteQueryRetry();
+                    }
+
+                    
+
+                    terms.Add(new KeyValuePair<Guid, string>(taxonomyItem.Id, taxonomyItem.Name));
+                }
+
+                TaxonomyField taxField = ctx.CastTo<TaxonomyField>(field);
+
+                taxField.EnsureProperty(tf => tf.AllowMultipleValues);
+
+                if (taxField.AllowMultipleValues)
+                {
+                    var termValuesString = String.Empty;
+                    foreach (var term in terms)
+                    {
+                        termValuesString += "-1;#" + term.Value + "|" + term.Key.ToString("D") + ";#";
+                    }
+
+                    termValuesString = termValuesString.Substring(0, termValuesString.Length - 2);
+
+                    var newTaxFieldValue = new TaxonomyFieldValueCollection(ctx, termValuesString, taxField);
+                    taxField.SetFieldValueByValueCollection(item, newTaxFieldValue);
+
+                    ctx.ExecuteQueryRetry();
+                }
+                else
+                {
+                    log.Info("You are trying to set multiple values in a single value field. Skipping values for field " );
+                }
+            //}
+            //else
+            //{
+            //    Guid termGuid = Guid.Empty;
+            //    if (!Guid.TryParse(value as string, out termGuid))
+            //    {
+            //        // Assume it's a TermPath
+            //        var taxonomyItem = ClientContext.Site.GetTaxonomyItemByPath(value as string);
+            //        termGuid = taxonomyItem.Id;
+            //    }
+            //    item[key as string] = termGuid.ToString();
+            //}
+
+                item.Update();
         }
     }
 }

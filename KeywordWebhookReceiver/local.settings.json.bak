@@ -4,9 +4,9 @@
     "AzureWebJobsStorage": "",
     "AzureWebJobsDashboard": "",
     "SiteUrl": "https://simedev.sharepoint.com/sites/Testteam/",
-    "UserName": "koskila@simedev.onmicrosoft.com",
-    "Password": "",
     "CognitiveServicesAPIkey": "",
-    "ListName": "Documents"
+    "SPO_UserName": "koskila@simedev.onmicrosoft.com",
+    "SPO_Password": "",
+    "SPO_ListName": "Documents"
   }
 }
