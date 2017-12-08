@@ -319,55 +319,6 @@ namespace KeywordWebhookReceiver
 
                     terms.Add(new KeyValuePair<Guid, string>(term1.Id, term1.Name));
                     continue;
-
-                    LabelMatchInformation lmi = new LabelMatchInformation(ctx);
-                    //lmi.DefaultLabelOnly = true;
-                    lmi.TermLabel = arrayItem as string;
-                    //lmi.TrimDeprecated = false;
-                    lmi.TrimUnavailable = false;
-                    //lmi.StringMatchOption = StringMatchOption.ExactMatch;
-
-                    var matches = taxSession.GetTerms(lmi);
-
-                    ctx.Load(matches);
-                    ctx.ExecuteQuery();
-
-                    if (matches.Count > 0)
-                    {
-                        taxonomyItem = matches.First();
-                        log.Info("Found item " + arrayItem.ToString());
-                    }
-                    else if (!Guid.TryParse(arrayItem as string, out termGuid))
-                    {
-                        // Assume it's a TermPath
-                        taxonomyItem = ctx.Site.GetTaxonomyItemByPath(arrayItem as string);
-
-                        log.Info("Found item " + arrayItem.ToString() + " with Path!");
-                    }
-                    else
-                    {
-                        taxonomyItem = taxSession.GetTerm(termGuid);
-                        ctx.Load(taxonomyItem);
-                        ctx.ExecuteQueryRetry();
-
-                        log.Info("Found item " + arrayItem.ToString() + " with Guid!");
-                    }
-
-                    if (taxonomyItem == null)
-                    {
-                        log.Info("Item " + arrayItem.ToString() + " was actually null, creating a new one...");
-                        taxonomyItem = taxSession.GetDefaultSiteCollectionTermStore().KeywordsTermSet.CreateTerm(arrayItem as string, lcid, Guid.NewGuid());
-                    }
-
-                    ctx.Load(taxonomyItem);
-                    ctx.ExecuteQuery();
-
-                    taxonomyItem.TermStore.CommitAll();
-                    ctx.ExecuteQuery();
-
-                    log.Info("Item " + arrayItem.ToString() + " gotten and committed!");
-
-                    terms.Add(new KeyValuePair<Guid, string>(taxonomyItem.Id, taxonomyItem.Name));
                 }
 
                 //taxSession.UpdateCache();
