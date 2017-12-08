@@ -108,7 +108,7 @@ namespace KeywordWebhookReceiver
                             {
                                 try
                                 {
-                                    log.Info(li.File.Name);
+                                    log.Info("Got a file!" + li.File.Name);
 
                                     var fileRef = li.File.ServerRelativeUrl;
                                     var fileInfo = Microsoft.SharePoint.Client.File.OpenBinaryDirect(ctx, fileRef);
@@ -116,6 +116,8 @@ namespace KeywordWebhookReceiver
 
                                     using (var ms = new MemoryStream())
                                     {
+                                        log.Info("Extracting text..");
+
                                         fileInfo.Stream.CopyTo(ms);
                                         byte[] fileContents = ms.ToArray();
 
@@ -123,48 +125,10 @@ namespace KeywordWebhookReceiver
                                         var extractionResult = extractor.Extract(fileContents);
                                         string text = extractionResult.Text;
 
-                                        log.Info("Extracting text..");
-
-                                        // sanitize text a bit
-                                        text = Regex.Replace(text, @"[\r\n\t\f\v]", " ");
-                                        text = Regex.Replace(text, @"[^a-z.,!?]", " ", RegexOptions.IgnoreCase);
-                                        text = Regex.Replace(text, @"( +)", " ");
-
                                         int snippetEnd = 500 < text.Length ? 500 : text.Length;
+                                        log.Info("Extracted text! First few rows here.. \r\n " + text.Substring(0, snippetEnd));
 
-                                        log.Info("Extracted text! First few rows here.. \r\n " + text.Substring(0,snippetEnd));
-
-                                        List<string> sentences = new List<string>();
-                                        var RegEx_SentenceDelimiter = new Regex(@"(\.|\!|\?)");
-                                        sentences = RegEx_SentenceDelimiter.Split(text).ToList();
-
-                                        List<string> finalizedSentences = new List<string>();
-
-                                        string sentenceCandidate = "";
-                                        foreach (var sentence in sentences)
-                                        {
-                                            // sanitize
-                                            if (sentence.Length < 5) continue;
-
-                                            if (sentenceCandidate.Length + sentence.Length > 5120)
-                                            {
-                                                finalizedSentences.Add(sentenceCandidate);
-                                                sentenceCandidate = sentence;
-                                            }
-                                            else
-                                            {
-                                                sentenceCandidate += " " + sentence;
-                                            }
-                                        }
-
-                                        var analyzable = new List<MultiLanguageInput>();
-
-                                        int i = 0;
-                                        foreach (var s in finalizedSentences)
-                                        {
-                                            if (s.Length > 10) analyzable.Add(new MultiLanguageInput("en", i + "", s));
-                                            i++;
-                                        }
+                                        List<MultiLanguageInput> analyzable = FormatAnalyzableText(text);
 
                                         if (keyPhrases.Count <= 0) RunTextAnalysis(ref keyPhrases, analyzable, log);
                                     }
@@ -188,7 +152,7 @@ namespace KeywordWebhookReceiver
                                         TextInfo ti = new CultureInfo("en-US", false).TextInfo;
 
                                         li["Title"] = ti.ToTitleCase(li.File.Name);
-                                        li["Description0"] = ti.ToTitleCase(description.ToLower());
+                                        //li["Description0"] = ti.ToTitleCase(description.ToLower());
 
                                         li.Update();
                                     }
@@ -255,6 +219,53 @@ namespace KeywordWebhookReceiver
                 : req.CreateResponse(HttpStatusCode.OK, "Hello " + name + "\r\n\r\n" + message);
         }
 
+        private static List<MultiLanguageInput> FormatAnalyzableText(string text)
+        {
+            // sanitize text a bit
+            text = Regex.Replace(text, @"[\r\n\t\f\v]", " ");
+            text = Regex.Replace(text, @"[^\w.,'!?הצוü]", " ", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"( +)", " ");
+
+            List<string> sentences = new List<string>();
+            var RegEx_SentenceDelimiter = new Regex(@"(\.|\!|\?)");
+            sentences = RegEx_SentenceDelimiter.Split(text).ToList();
+
+            List<string> finalizedSentences = new List<string>();
+
+            string sentenceCandidate = "";
+            foreach (var sentence in sentences)
+            {
+                // sanitize
+
+                // drop short sentences
+                if (sentence.Length < 5) continue;
+
+                // combine or add other sentences
+                if (sentenceCandidate.Length + sentence.Length > 5120)
+                {
+                    finalizedSentences.Add(sentenceCandidate);
+                    sentenceCandidate = sentence;
+                }
+                else
+                {
+                    sentenceCandidate += " " + sentence;
+                }
+            }
+            // finally, add the last candidate
+            finalizedSentences.Add(sentenceCandidate);
+
+            var analyzable = new List<MultiLanguageInput>();
+
+            int i = 0;
+            foreach (var s in finalizedSentences)
+            {
+                if (s.Length > 10) analyzable.Add(new MultiLanguageInput("en", i + "", s));
+                i++;
+            }
+
+            return analyzable;
+        }
+
         private static void RunTextAnalysis(ref List<string> keyPhrases, List<MultiLanguageInput> analyzable, TraceWriter log)
         {
             var batch = new MultiLanguageBatchInput();
@@ -278,13 +289,12 @@ namespace KeywordWebhookReceiver
             }
             catch (Exception ex)
             {
-                //messages += ex.Message;
                 log.Warning(ex.Message);
             }
         }
 
         private static int lcid = 1033;
-        private static Guid wantedGuid = new Guid("b194954e-ba65-4a51-a5b8-c4f732573d24");
+        private static Guid wantedGuid = new Guid("b194954e-ba65-4a51-a5b8-c4f732573d24"); // Guid of the termset used by our custom Keywords -field
 
         private static void UpdateManagedMetadata(string[] value, TraceWriter log, ClientContext ctx, ListItem item, Field field)
         {
