@@ -283,6 +283,7 @@ namespace KeywordWebhookReceiver
         }
 
         private static int lcid = 1033;
+        private static Guid wantedGuid = new Guid("b194954e-ba65-4a51-a5b8-c4f732573d24");
 
         private static void UpdateTaxonomyField(string[] value, TraceWriter log, ClientContext ctx, ListItem item, Field field)
         {
@@ -292,64 +293,97 @@ namespace KeywordWebhookReceiver
                 var terms = new List<KeyValuePair<Guid, string>>();
 
                 var store = TaxonomyExtensions.GetDefaultKeywordsTermStore(ctx.Site);
-                var keywordTermSet = store.KeywordsTermSet;
+                //var keywordTermSet = store.KeywordsTermSet;
+                var keywordTermSet = store.GetTermSet(wantedGuid);
 
-                ctx.Load(store);
-                ctx.Load(keywordTermSet);
+                ctx.Load(field);
                 ctx.ExecuteQuery();
 
-                foreach (var arrayItem in value as object[])
+                TaxonomyField taxField = ctx.CastTo<TaxonomyField>(field);
+                taxField.EnsureProperty(tf => tf.AllowMultipleValues);
+
+                ctx.Load(taxSession);
+                ctx.Load(store);
+                ctx.Load(taxField);
+                ctx.Load(keywordTermSet);
+                ctx.Load(item);
+                ctx.ExecuteQuery();
+
+                taxField.IsKeyword = false;
+                //taxField.TermSetId = keywordTermSet.Id;
+                taxField.Update();
+
+                ctx.Load(taxField);
+                ctx.ExecuteQuery();
+
+                Term term1 = null;
+
+                foreach (var arrayItem in value)
                 {
-                    TaxonomyItem taxonomyItem;
                     Guid termGuid = Guid.Empty;
+                    term1 = keywordTermSet.Terms.GetByName(arrayItem);
 
-                    var term1 = keywordTermSet.Terms.GetByName(arrayItem as string);
-
+                    try
+                    {
+                        ctx.Load(term1);
+                        ctx.ExecuteQuery();
+                    }
+                    catch (Exception ex)
+                    {
+                        term1 = keywordTermSet.CreateTerm(arrayItem, lcid, Guid.NewGuid());
+                        log.Info(ex.Message);
+                    }                        
+                    
                     ctx.Load(term1);
                     ctx.ExecuteQuery();
 
-                    if (term1 == null)
-                    {
-                        term1 = keywordTermSet.CreateTerm(arrayItem as string, lcid, Guid.NewGuid());
-                    }
-                    
                     store.CommitAll();
-                    ctx.Load(term1);
                     ctx.ExecuteQuery();
 
                     terms.Add(new KeyValuePair<Guid, string>(term1.Id, term1.Name));
-                    continue;
                 }
 
                 //taxSession.UpdateCache();
 
-                TaxonomyField taxField = ctx.CastTo<TaxonomyField>(field);
+                var listItem = item.ParentList.GetItemById(item.Id);
+                ctx.Load(listItem);
 
-                taxField.EnsureProperty(tf => tf.AllowMultipleValues);
+                //TaxonomyExtensions.
 
-                if (taxField.AllowMultipleValues)
-                {
-                    var termValuesString = String.Empty;
-                    foreach (var term in terms)
-                    {
-                        termValuesString += "-1;#" + term.Value + "|" + term.Key.ToString("D") + ";#";
-                    }
+                ctx.Load(taxSession);
+                ctx.Load(store);
+                ctx.Load(taxField);
+                ctx.Load(keywordTermSet);
+                ctx.Load(item);
+                ctx.ExecuteQuery();
 
-                    termValuesString = termValuesString.Substring(0, termValuesString.Length - 2);
+                ClearTaxonomyFieldValue(ctx, item.ParentList, item, taxField.InternalName);
+                ctx.Load(item);
+                ctx.ExecuteQuery();
 
-                    taxField.IsKeyword = true;
-                    taxField.TermSetId = keywordTermSet.Id;
-                    ctx.ExecuteQuery();
+                //UpdateTaxonomyField(ctx, item.ParentList, item, taxField.InternalName, terms[0].Value + "|" + terms[0].Key);
+                TaxonomyExtensions.SetTaxonomyFieldValues(listItem, taxField.Id, terms);
+                
+                //if (taxField.AllowMultipleValues)
+                //{
+                //    var termValuesString = String.Empty;
+                //    foreach (var term in terms)
+                //    {
+                //        termValuesString += "-1;#" + term.Value + "|" + term.Key.ToString("D") + ";#";
+                //    }
 
-                    var newTaxFieldValue = new TaxonomyFieldValueCollection(ctx, termValuesString, taxField);
-                    taxField.SetFieldValueByValueCollection(item, newTaxFieldValue);
+                //    termValuesString = termValuesString.Substring(0, termValuesString.Length - 2);
 
-                    ctx.ExecuteQueryRetry();
-                }
-                else
-                {
-                    log.Info("You are trying to set multiple values in a single value field. Skipping values for field ");
-                }
+                //    var newTaxFieldValue = new TaxonomyFieldValueCollection(ctx, termValuesString, taxField);
+                //    //taxField.SetFieldValueByValueCollection(item, newTaxFieldValue);
+                //    taxField.SetFieldValueByTerm(item, term1, lcid);
+
+                //    ctx.ExecuteQueryRetry();
+                //}
+                //else
+                //{
+                //    log.Info("You are trying to set multiple values in a single value field. Skipping values for field ");
+                //}
 
                 item.Update();
             }
@@ -358,6 +392,31 @@ namespace KeywordWebhookReceiver
                 log.Error(ex.Message);
                 //throw;
             }
+        }
+
+        public static void UpdateTaxonomyField(ClientContext ctx, List list, ListItem listItem, string fieldName, string fieldValue)
+        {
+            Field field = list.Fields.GetByInternalNameOrTitle(fieldName);
+            TaxonomyField txField = ctx.CastTo<TaxonomyField>(field);
+            TaxonomyFieldValue termValue = new TaxonomyFieldValue();
+            string[] term = fieldValue.Split('|');
+            termValue.Label = term[0];
+            termValue.TermGuid = term[1];
+            termValue.WssId = -1;
+            txField.SetFieldValueByValue(listItem, termValue);
+            listItem.Update();
+            ctx.Load(listItem);
+            ctx.ExecuteQuery();
+        }
+
+        public static void ClearTaxonomyFieldValue(ClientContext ctx, List list, ListItem listItem, string fieldName)
+        {
+            Field field = list.Fields.GetByInternalNameOrTitle(fieldName);
+            TaxonomyField txField = ctx.CastTo<TaxonomyField>(field);
+            txField.ValidateSetValue(listItem, null);
+            listItem.Update();
+            ctx.Load(listItem);
+            ctx.ExecuteQuery();
         }
     }
 }
