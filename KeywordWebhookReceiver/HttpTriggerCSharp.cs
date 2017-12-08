@@ -30,6 +30,7 @@ namespace KeywordWebhookReceiver
         public static readonly string password = System.Configuration.ConfigurationManager.AppSettings["SPO_Password"];
         public static readonly string listName = System.Configuration.ConfigurationManager.AppSettings["SPO_ListName"];
 
+        private static readonly string[] terms = new string[] { "test term 3", "lol test 3" };
 
         [FunctionName("HttpTriggerCSharp")]
         public static async Task<HttpResponseMessage> Run([HttpTrigger(AuthorizationLevel.Anonymous, "get", "post", Route = null)]HttpRequestMessage req, TraceWriter log)
@@ -89,11 +90,8 @@ namespace KeywordWebhookReceiver
                         ctx.Load(li.File);
                         ctx.ExecuteQuery();
 
-                        Microsoft.SharePoint.Client.File file = li.File;
-                        ctx.Load(file);
                         ctx.ExecuteQuery();
 
-                        var terms = new string[] { "test term 2", "lol test 2" };
                         keyPhrases.AddRange(terms);
 
                         if (li.File.Name.IndexOf("pdf") >= 0)
@@ -101,7 +99,6 @@ namespace KeywordWebhookReceiver
                             li.File.OpenBinaryStream();
 
                             ctx.Load(li.File);
-                            ctx.Load(file);
                             ctx.ExecuteQuery();
 
                             log.Info("It was a pdf! Continuing into handling...");
@@ -110,7 +107,7 @@ namespace KeywordWebhookReceiver
                             {
                                 try
                                 {
-                                    log.Info(file.Name);
+                                    log.Info(li.File.Name);
 
                                     var fileRef = li.File.ServerRelativeUrl;
                                     var fileInfo = Microsoft.SharePoint.Client.File.OpenBinaryDirect(ctx, fileRef);
@@ -189,7 +186,7 @@ namespace KeywordWebhookReceiver
                                         log.Info("Saving to SharePoint..");
                                         TextInfo ti = new CultureInfo("en-US", false).TextInfo;
 
-                                        li["Title"] = ti.ToTitleCase(file.Name);
+                                        li["Title"] = ti.ToTitleCase(li.File.Name);
                                         li["Description0"] = ti.ToTitleCase(description.ToLower());
 
                                         li.Update();
@@ -285,94 +282,131 @@ namespace KeywordWebhookReceiver
             }
         }
 
+        private static int lcid = 1033;
+
         private static void UpdateTaxonomyField(string[] value, TraceWriter log, ClientContext ctx, ListItem item, Field field)
         {
-            var taxSession = ctx.Site.GetTaxonomySession();
-            var terms = new List<KeyValuePair<Guid, string>>();
-            foreach (var arrayItem in value as object[])
+            try
             {
-                TaxonomyItem taxonomyItem;
-                Guid termGuid = Guid.Empty;
+                var taxSession = ctx.Site.GetTaxonomySession();
+                var terms = new List<KeyValuePair<Guid, string>>();
 
                 var store = TaxonomyExtensions.GetDefaultKeywordsTermStore(ctx.Site);
+                var keywordTermSet = store.KeywordsTermSet;
 
-                LabelMatchInformation lmi = new LabelMatchInformation(ctx);
-                //lmi.DefaultLabelOnly = true;
-                lmi.TermLabel = arrayItem as string;
-                //lmi.TrimDeprecated = false;
-                lmi.TrimUnavailable = false;
-                //lmi.StringMatchOption = StringMatchOption.ExactMatch;
-
-                var matches = taxSession.GetTerms(lmi);
-
-                ctx.Load(matches);
+                ctx.Load(store);
+                ctx.Load(keywordTermSet);
                 ctx.ExecuteQuery();
 
-                if (matches.Count > 0)
+                foreach (var arrayItem in value as object[])
                 {
-                    taxonomyItem = matches.First();
-                    log.Info("Found item " + arrayItem.ToString());
-                }
-                else if (!Guid.TryParse(arrayItem as string, out termGuid))
-                {
-                    // Assume it's a TermPath
-                    taxonomyItem = ctx.Site.GetTaxonomyItemByPath(arrayItem as string);
+                    TaxonomyItem taxonomyItem;
+                    Guid termGuid = Guid.Empty;
 
-                    log.Info("Found item " + arrayItem.ToString() + " with Path!");
+                    var term1 = keywordTermSet.Terms.GetByName(arrayItem as string);
+
+                    ctx.Load(term1);
+                    ctx.ExecuteQuery();
+
+                    if (term1 == null)
+                    {
+                        term1 = keywordTermSet.CreateTerm(arrayItem as string, lcid, Guid.NewGuid());
+                    }
+                    
+                    store.CommitAll();
+                    ctx.Load(term1);
+                    ctx.ExecuteQuery();
+
+                    terms.Add(new KeyValuePair<Guid, string>(term1.Id, term1.Name));
+                    continue;
+
+                    LabelMatchInformation lmi = new LabelMatchInformation(ctx);
+                    //lmi.DefaultLabelOnly = true;
+                    lmi.TermLabel = arrayItem as string;
+                    //lmi.TrimDeprecated = false;
+                    lmi.TrimUnavailable = false;
+                    //lmi.StringMatchOption = StringMatchOption.ExactMatch;
+
+                    var matches = taxSession.GetTerms(lmi);
+
+                    ctx.Load(matches);
+                    ctx.ExecuteQuery();
+
+                    if (matches.Count > 0)
+                    {
+                        taxonomyItem = matches.First();
+                        log.Info("Found item " + arrayItem.ToString());
+                    }
+                    else if (!Guid.TryParse(arrayItem as string, out termGuid))
+                    {
+                        // Assume it's a TermPath
+                        taxonomyItem = ctx.Site.GetTaxonomyItemByPath(arrayItem as string);
+
+                        log.Info("Found item " + arrayItem.ToString() + " with Path!");
+                    }
+                    else
+                    {
+                        taxonomyItem = taxSession.GetTerm(termGuid);
+                        ctx.Load(taxonomyItem);
+                        ctx.ExecuteQueryRetry();
+
+                        log.Info("Found item " + arrayItem.ToString() + " with Guid!");
+                    }
+
+                    if (taxonomyItem == null)
+                    {
+                        log.Info("Item " + arrayItem.ToString() + " was actually null, creating a new one...");
+                        taxonomyItem = taxSession.GetDefaultSiteCollectionTermStore().KeywordsTermSet.CreateTerm(arrayItem as string, lcid, Guid.NewGuid());
+                    }
+
+                    ctx.Load(taxonomyItem);
+                    ctx.ExecuteQuery();
+
+                    taxonomyItem.TermStore.CommitAll();
+                    ctx.ExecuteQuery();
+
+                    log.Info("Item " + arrayItem.ToString() + " gotten and committed!");
+
+                    terms.Add(new KeyValuePair<Guid, string>(taxonomyItem.Id, taxonomyItem.Name));
+                }
+
+                //taxSession.UpdateCache();
+
+                TaxonomyField taxField = ctx.CastTo<TaxonomyField>(field);
+
+                taxField.EnsureProperty(tf => tf.AllowMultipleValues);
+
+                if (taxField.AllowMultipleValues)
+                {
+                    var termValuesString = String.Empty;
+                    foreach (var term in terms)
+                    {
+                        termValuesString += "-1;#" + term.Value + "|" + term.Key.ToString("D") + ";#";
+                    }
+
+                    termValuesString = termValuesString.Substring(0, termValuesString.Length - 2);
+
+                    taxField.IsKeyword = true;
+                    taxField.TermSetId = keywordTermSet.Id;
+                    ctx.ExecuteQuery();
+
+                    var newTaxFieldValue = new TaxonomyFieldValueCollection(ctx, termValuesString, taxField);
+                    taxField.SetFieldValueByValueCollection(item, newTaxFieldValue);
+
+                    ctx.ExecuteQueryRetry();
                 }
                 else
                 {
-                    taxonomyItem = taxSession.GetTerm(termGuid);
-                    ctx.Load(taxonomyItem);
-                    ctx.ExecuteQueryRetry();
-
-                    log.Info("Found item " + arrayItem.ToString() + " with Guid!");
+                    log.Info("You are trying to set multiple values in a single value field. Skipping values for field ");
                 }
 
-                if (taxonomyItem == null)
-                {
-                    log.Info("Item " + arrayItem.ToString() + " was actually null, creating a new one...");
-                    taxonomyItem = taxSession.GetDefaultSiteCollectionTermStore().KeywordsTermSet.CreateTerm(arrayItem as string, 1035, Guid.NewGuid());
-                }
-
-                ctx.Load(taxonomyItem);
-                ctx.ExecuteQuery();
-
-                taxonomyItem.TermStore.CommitAll();
-                ctx.ExecuteQuery();
-                log.Info("Item " + arrayItem.ToString() + " gotten and committed!");
-
-                terms.Add(new KeyValuePair<Guid, string>(taxonomyItem.Id, taxonomyItem.Name));
+                item.Update();
             }
-
-            //taxSession.UpdateCache();
-
-            TaxonomyField taxField = ctx.CastTo<TaxonomyField>(field);
-
-            taxField.EnsureProperty(tf => tf.AllowMultipleValues);
-
-            if (taxField.AllowMultipleValues)
+            catch (Exception ex)
             {
-                var termValuesString = String.Empty;
-                foreach (var term in terms)
-                {
-                    termValuesString += "-1;#" + term.Value + "|" + term.Key.ToString("D") + ";#";
-                }
-
-                termValuesString = termValuesString.Substring(0, termValuesString.Length - 2);
-
-                var newTaxFieldValue = new TaxonomyFieldValueCollection(ctx, termValuesString, taxField);
-                taxField.SetFieldValueByValueCollection(item, newTaxFieldValue);
-
-                ctx.ExecuteQueryRetry();
+                log.Error(ex.Message);
+                //throw;
             }
-            else
-            {
-                log.Info("You are trying to set multiple values in a single value field. Skipping values for field " );
-            }
-
-
-            item.Update();
-    }
+        }
     }
 }
