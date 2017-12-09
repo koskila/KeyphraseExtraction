@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
-VisualStudioVersion = 15.0.27004.2002
+VisualStudioVersion = 15.0.27130.2003
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Koskila.KeywordManager", "Koskila.KeywordManager\Koskila.KeywordManager.csproj", "{A69C2BDE-8F81-479C-BB58-6BE4B6F95044}"
 EndProject
@@ -10,6 +10,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LinguisticsClient", "ClientLibrary\LinguisticsClient.csproj", "{8388E984-34E1-443D-9F04-D588DC4BBB22}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "KeywordWebhookReceiver", "KeywordWebhookReceiver\KeywordWebhookReceiver.csproj", "{0D7FA160-4B4B-448D-8867-F6931242E478}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Samples", "Samples", "{7A9A39EB-D6BE-4BFC-81D3-94BDCB4A4FE5}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -36,6 +38,10 @@ Global
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{9BE553C3-E1B7-4C0A-B868-02E4252FA48C} = {7A9A39EB-D6BE-4BFC-81D3-94BDCB4A4FE5}
+		{8388E984-34E1-443D-9F04-D588DC4BBB22} = {7A9A39EB-D6BE-4BFC-81D3-94BDCB4A4FE5}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {EC3507C2-72D9-4D7F-B48E-9AADEBF29883}
