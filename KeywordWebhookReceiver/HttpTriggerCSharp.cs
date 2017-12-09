@@ -33,6 +33,10 @@ namespace KeywordWebhookReceiver
         //private static readonly string[] terms = new string[] { "test term 4", "lol test 4" };
         private static readonly string[] terms = new string[] { };
 
+        private static int lcid = 1033;
+        private static Guid wantedGuid = new Guid("b194954e-ba65-4a51-a5b8-c4f732573d24"); // Guid of the termset used by our custom Keywords -field
+        private static int keywordCount = 10;
+
         [FunctionName("HttpTriggerCSharp")]
         public static async Task<HttpResponseMessage> Run([HttpTrigger(AuthorizationLevel.Anonymous, "get", "post", Route = null)]HttpRequestMessage req, TraceWriter log)
         {
@@ -95,14 +99,15 @@ namespace KeywordWebhookReceiver
 
                         keyPhrases.AddRange(terms);
 
-                        if (li.File.Name.IndexOf("pdf") >= 0)
+                        // We CAN extract text out of most documents with the library, but for this demo I'm limiting our options to these 2 that I know to be working :)
+                        if (li.File.Name.IndexOf(".pdf") >= 0 || li.File.Name.IndexOf(".doc") >= 0)
                         {
                             li.File.OpenBinaryStream();
 
                             ctx.Load(li.File);
                             ctx.ExecuteQuery();
 
-                            log.Info("It was a pdf! Continuing into handling...");
+                            log.Info("It was a valid file! Continuing into handling...");
 
                             using (System.IO.MemoryStream mStream = new System.IO.MemoryStream())
                             {
@@ -125,10 +130,10 @@ namespace KeywordWebhookReceiver
                                         var extractionResult = extractor.Extract(fileContents);
                                         string text = extractionResult.Text;
 
+                                        List<MultiLanguageInput> analyzable = FormatAnalyzableText(ref text);
+
                                         int snippetEnd = 500 < text.Length ? 500 : text.Length;
                                         log.Info("Extracted text! First few rows here.. \r\n " + text.Substring(0, snippetEnd));
-
-                                        List<MultiLanguageInput> analyzable = FormatAnalyzableText(text);
 
                                         if (keyPhrases.Count <= 0) RunTextAnalysis(ref keyPhrases, analyzable, log);
                                     }
@@ -141,7 +146,7 @@ namespace KeywordWebhookReceiver
 
                                     // then write the most important keyphrases back
                                     string description = "";
-                                    foreach (var s in keyPhrases.Take(10))
+                                    foreach (var s in keyPhrases.Take(keywordCount))
                                     {
                                         description += s + "\r\n";
                                     }
@@ -152,6 +157,8 @@ namespace KeywordWebhookReceiver
                                         TextInfo ti = new CultureInfo("en-US", false).TextInfo;
 
                                         li["Title"] = ti.ToTitleCase(li.File.Name);
+
+                                        // We could parse description text the keyphrases, but let's skip that 
                                         //li["Description0"] = ti.ToTitleCase(description.ToLower());
 
                                         li.Update();
@@ -172,7 +179,8 @@ namespace KeywordWebhookReceiver
                                         var field = list.GetFields(fieldnames).First();
 
                                         // setting managed metadata
-                                        UpdateManagedMetadata(keyPhrases.Take(10).ToArray(), log, ctx, li, field);
+                                        log.Info("Updating keywords to taxonomy! Taking: " + keywordCount);
+                                        UpdateManagedMetadata(keyPhrases.Take(keywordCount).ToArray(), log, ctx, li, field);
 
                                         ctx.ExecuteQuery();
                                     }
@@ -219,15 +227,19 @@ namespace KeywordWebhookReceiver
                 : req.CreateResponse(HttpStatusCode.OK, "Hello " + name + "\r\n\r\n" + message);
         }
 
-        private static List<MultiLanguageInput> FormatAnalyzableText(string text)
+        private static List<MultiLanguageInput> FormatAnalyzableText(ref string text)
         {
             // sanitize text a bit
             text = Regex.Replace(text, @"[\r\n\t\f\v]", " ");
-            text = Regex.Replace(text, @"[^\w.,'!?הצוü]", " ", RegexOptions.IgnoreCase);
+            // remove extremely long words - they'll be headers, malformed parts or urls
+            text = Regex.Replace(text, @"\S{30,}", " ", RegexOptions.None);
+            // remove numbers and everything else but text.
+            text = Regex.Replace(text, @"[^a-zA-Z.,'!?הצוü]", " ", RegexOptions.IgnoreCase);
+            // lastly, remove extra whitespace
             text = Regex.Replace(text, @"( +)", " ");
 
             List<string> sentences = new List<string>();
-            var RegEx_SentenceDelimiter = new Regex(@"(\.|\!|\?)");
+            var RegEx_SentenceDelimiter = new Regex(@"(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\?)\s");
             sentences = RegEx_SentenceDelimiter.Split(text).ToList();
 
             List<string> finalizedSentences = new List<string>();
@@ -237,8 +249,8 @@ namespace KeywordWebhookReceiver
             {
                 // sanitize
 
-                // drop short sentences
-                if (sentence.Length < 5) continue;
+                // drop short sentences (they'll be like "et al", one-liners like "go figure" or just "."
+                if (sentence.Length < 10) continue;
 
                 // combine or add other sentences
                 if (sentenceCandidate.Length + sentence.Length > 5120)
@@ -293,8 +305,6 @@ namespace KeywordWebhookReceiver
             }
         }
 
-        private static int lcid = 1033;
-        private static Guid wantedGuid = new Guid("b194954e-ba65-4a51-a5b8-c4f732573d24"); // Guid of the termset used by our custom Keywords -field
 
         private static void UpdateManagedMetadata(string[] value, TraceWriter log, ClientContext ctx, ListItem item, Field field)
         {
@@ -341,8 +351,8 @@ namespace KeywordWebhookReceiver
                     }
                     catch (Exception ex)
                     {
+                        log.Info("Encountered an error, probably because a term didn't exist yet! Creating...");
                         term1 = keywordTermSet.CreateTerm(arrayItem, lcid, Guid.NewGuid());
-                        log.Info(ex.Message);
                     }                        
                     
                     ctx.Load(term1);
@@ -366,6 +376,7 @@ namespace KeywordWebhookReceiver
                 log.Error(ex.Message);
             }
         }
+
 
         public static void UpdateTaxonomyField(ClientContext ctx, List list, ListItem listItem, string fieldName, string fieldValue)
         {
