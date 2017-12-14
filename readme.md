@@ -1,14 +1,13 @@
 # Keyword and Tagging examples
 
-This is my public repository for testing all kinds of Cognitive Services -related demos etc.
+This is my public repository for testing KeyPhrase extraction and application.
 
 ## Getting Started
 
 
 ## Demo
 
-See this video:
+See this video: https://youtu.be/G0kESOlBBjk
 
 ### Prerequisites
 
-What things you need to install the software and how to install them
