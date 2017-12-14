@@ -2,6 +2,14 @@
 
 This is my public repository for testing KeyPhrase extraction and application.
 
+## Koskila.KeywordManager
+
+Retired example using Azure Cognitive Services Topics -API
+
+## KeywordWebhookReceiver
+
+
+
 ## Getting Started
 
 
