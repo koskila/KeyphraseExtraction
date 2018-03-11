@@ -14,6 +14,7 @@ using System.Collections.Generic;
 using Microsoft.Azure.CognitiveServices.Language.TextAnalytics.Models;
 using Microsoft.Azure.CognitiveServices.Language.TextAnalytics;
 using System.Globalization;
+using Newtonsoft.Json;
 using Microsoft.SharePoint.Client.Taxonomy;
 
 using TaxonomyExtensions = Microsoft.SharePoint.Client.TaxonomyExtensions;
@@ -30,11 +31,17 @@ namespace KeywordWebhookReceiver
         public static readonly string password = System.Configuration.ConfigurationManager.AppSettings["SPO_Password"];
         public static readonly string listName = System.Configuration.ConfigurationManager.AppSettings["SPO_ListName"];
 
-        //private static readonly string[] terms = new string[] { "test term 4", "lol test 4" };
-        private static readonly string[] terms = new string[] { };
+        /// <summary>
+        /// If you uncomment the row below, the cognitive services part of the code will revert to test/dev mode
+        /// </summary>
+        private static readonly string[] terms = new string[] { "test term 4", "test term 1" };
+        //private static readonly string[] terms = new string[] { };
 
         private static int lcid = 1033;
-        private static Guid wantedGuid = new Guid("b194954e-ba65-4a51-a5b8-c4f732573d24"); // Guid of the termset used by our custom Keywords -field
+        /// <summary>
+        /// Guid of the termset used by our custom Keywords -field
+        /// </summary>
+        private static Guid wantedGuid = new Guid("b194954e-ba65-4a51-a5b8-c4f732573d24"); 
         private static int keywordCount = 10;
 
         [FunctionName("HttpTriggerCSharp")]
@@ -60,6 +67,8 @@ namespace KeywordWebhookReceiver
                 .Value;
 
             List<string> keyPhrases = new List<string>();
+
+            string description = "";
 
             // Get request body
             dynamic data = await req.Content.ReadAsAsync<object>();
@@ -97,8 +106,6 @@ namespace KeywordWebhookReceiver
 
                         ctx.ExecuteQuery();
 
-                        keyPhrases.AddRange(terms);
-
                         // We CAN extract text out of most documents with the library, but for this demo I'm limiting our options to these 2 that I know to be working :)
                         if (li.File.Name.IndexOf(".pdf") >= 0 || li.File.Name.IndexOf(".doc") >= 0)
                         {
@@ -115,40 +122,44 @@ namespace KeywordWebhookReceiver
                                 {
                                     log.Info("Got a file!" + li.File.Name);
 
-                                    var fileRef = li.File.ServerRelativeUrl;
-                                    var fileInfo = Microsoft.SharePoint.Client.File.OpenBinaryDirect(ctx, fileRef);
-                                    fileInfo = Microsoft.SharePoint.Client.File.OpenBinaryDirect(ctx, fileRef);
-
-                                    using (var ms = new MemoryStream())
+                                    // if "terms" has values, revert to test mode
+                                    if (terms.Length > 0)
                                     {
-                                        log.Info("Extracting text..");
-
-                                        fileInfo.Stream.CopyTo(ms);
-                                        byte[] fileContents = ms.ToArray();
-
-                                        var extractor = new TikaOnDotNet.TextExtraction.TextExtractor();
-                                        var extractionResult = extractor.Extract(fileContents);
-                                        string text = extractionResult.Text;
-
-                                        List<MultiLanguageInput> analyzable = FormatAnalyzableText(ref text);
-
-                                        int snippetEnd = 500 < text.Length ? 500 : text.Length;
-                                        log.Info("Extracted text! First few rows here.. \r\n " + text.Substring(0, snippetEnd));
-
-                                        if (keyPhrases.Count <= 0) RunTextAnalysis(ref keyPhrases, analyzable, log);
+                                        keyPhrases.AddRange(terms);
                                     }
+                                    else
+                                    { 
+                                        var fileRef = li.File.ServerRelativeUrl;
+                                        var fileInfo = Microsoft.SharePoint.Client.File.OpenBinaryDirect(ctx, fileRef);
+                                        fileInfo = Microsoft.SharePoint.Client.File.OpenBinaryDirect(ctx, fileRef);
 
-                                    log.Info("All found key phrases were: ");
-                                    foreach (var kp in keyPhrases)
-                                    {
-                                        log.Info(kp);
-                                    }
+                                        using (var ms = new MemoryStream())
+                                        {
+                                            log.Info("Extracting text..");
 
-                                    // then write the most important keyphrases back
-                                    string description = "";
-                                    foreach (var s in keyPhrases.Take(keywordCount))
-                                    {
-                                        description += s + "\r\n";
+                                            fileInfo.Stream.CopyTo(ms);
+                                            byte[] fileContents = ms.ToArray();
+
+                                            var extractor = new TikaOnDotNet.TextExtraction.TextExtractor();
+                                            var extractionResult = extractor.Extract(fileContents);
+                                            string text = extractionResult.Text;
+
+                                            List<MultiLanguageInput> analyzable = FormatAnalyzableText(ref text);
+
+                                            int snippetEnd = 500 < text.Length ? 500 : text.Length;
+                                            log.Info("Extracted text! First few rows here.. \r\n " + text.Substring(0, snippetEnd));
+
+                                            if (keyPhrases.Count <= 0)
+                                            {
+                                                RunTextAnalysis(ref keyPhrases, analyzable, log);
+                                            }
+                                        }
+
+                                        log.Info("All found key phrases were: ");
+                                        foreach (var kp in keyPhrases)
+                                        {
+                                            log.Info(kp);
+                                        }
                                     }
 
                                     try
@@ -158,37 +169,41 @@ namespace KeywordWebhookReceiver
 
                                         li["Title"] = ti.ToTitleCase(li.File.Name);
 
+                                        // then write the most important keyphrases back
+                                        foreach (var s in keyPhrases.Take(keywordCount))
+                                        {
+                                            description += s + "\r\n";
+                                        }
                                         // We could parse description text the keyphrases, but let's skip that 
                                         //li["Description0"] = ti.ToTitleCase(description.ToLower());
 
                                         li.Update();
+
+                                        try
+                                        {
+                                            ctx.Load(list.Fields);
+                                            ctx.ExecuteQuery();
+
+                                            log.Info("Updating Managed Metadata...");
+
+                                            var fieldnames = new string[] { "Keywords" };
+                                            var field = list.GetFields(fieldnames).First();
+
+                                            // setting managed metadata
+                                            log.Info("Updating keywords to taxonomy! Taking: " + keywordCount);
+                                            UpdateManagedMetadata(keyPhrases.Take(keywordCount).ToArray(), log, ctx, li, field, wantedGuid);
+
+                                            ctx.ExecuteQuery();
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            log.Error(ex.Message);
+                                        }
                                     }
                                     catch (Exception ex)
                                     {
                                         log.Error(ex.Message);
                                     }
-
-                                    try
-                                    {
-                                        ctx.Load(list.Fields);
-                                        ctx.ExecuteQuery();
-
-                                        log.Info("Updating Managed Metadata...");
-
-                                        var fieldnames = new string[] { "Keywords" };
-                                        var field = list.GetFields(fieldnames).First();
-
-                                        // setting managed metadata
-                                        log.Info("Updating keywords to taxonomy! Taking: " + keywordCount);
-                                        UpdateManagedMetadata(keyPhrases.Take(keywordCount).ToArray(), log, ctx, li, field);
-
-                                        ctx.ExecuteQuery();
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        log.Error(ex.Message);
-                                    }
-
                                 }
                                 catch (Exception ex)
                                 {
@@ -207,7 +222,7 @@ namespace KeywordWebhookReceiver
                     else
                     {
                         log.Info("List is not available on the site");
-                        return req.CreateResponse(HttpStatusCode.OK, "List is not available on the site");
+                        return req.CreateResponse(HttpStatusCode.NotFound, "List is not available on the site");
                     }
                 }
             }
@@ -217,14 +232,13 @@ namespace KeywordWebhookReceiver
                 message += "Error Message: " + ex.Message;
             }
 
-            // Set name to query string or body data
-            name = name ?? data?.name;
-
             log.Info("");
 
-            return name == null
+            var returnable = JsonConvert.SerializeObject(keyPhrases);
+
+            return keyPhrases.Count <= 0
                 ? req.CreateResponse(HttpStatusCode.BadRequest, "Please pass a name on the query string or in the request body")
-                : req.CreateResponse(HttpStatusCode.OK, "Hello " + name + "\r\n\r\n" + message);
+                : req.CreateResponse(HttpStatusCode.OK, returnable);
         }
 
         private static List<MultiLanguageInput> FormatAnalyzableText(ref string text)
@@ -305,7 +319,15 @@ namespace KeywordWebhookReceiver
             }
         }
 
-        private static void UpdateManagedMetadata(string[] value, TraceWriter log, ClientContext ctx, ListItem item, Field field)
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="values"></param>
+        /// <param name="log"></param>
+        /// <param name="ctx"></param>
+        /// <param name="item"></param>
+        /// <param name="field"></param>
+        private static void UpdateManagedMetadata(string[] values, TraceWriter log, ClientContext ctx, ListItem item, Field field, Guid guid)
         {
             try
             {
@@ -314,7 +336,7 @@ namespace KeywordWebhookReceiver
 
                 var store = TaxonomyExtensions.GetDefaultKeywordsTermStore(ctx.Site);
                 //var keywordTermSet = store.KeywordsTermSet;
-                var keywordTermSet = store.GetTermSet(wantedGuid);
+                var keywordTermSet = store.GetTermSet(guid);
 
                 ctx.Load(field);
                 ctx.ExecuteQuery();
@@ -336,13 +358,13 @@ namespace KeywordWebhookReceiver
                 ctx.Load(taxField);
                 ctx.ExecuteQuery();
 
-                Term term1 = null;
-
-                foreach (var arrayItem in value)
+                foreach (var arrayItem in values.Reverse())
                 {
+                    Term term1 = null;
                     Guid termGuid = Guid.Empty;
                     term1 = keywordTermSet.Terms.GetByName(arrayItem);
 
+                    // Test if this term is available
                     try
                     {
                         ctx.Load(term1);
@@ -351,7 +373,9 @@ namespace KeywordWebhookReceiver
                     catch (Exception ex)
                     {
                         log.Info("Encountered an error, probably because a term didn't exist yet! Creating...");
+
                         term1 = keywordTermSet.CreateTerm(arrayItem, lcid, Guid.NewGuid());
+                        term1.IsAvailableForTagging = true;
                     }                        
                     
                     ctx.Load(term1);
