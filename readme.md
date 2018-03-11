@@ -8,10 +8,11 @@ Retired example using Azure Cognitive Services Topics -API
 
 ## KeywordWebhookReceiver
 
-
+An Azure Function that takes input from a Flow (for example), fetches an item from SharePoint list, extracts the text, analyzes it for keyphrases (using Azure Cognitive Services) and then writes the keyphrases to the list item's taxonomy field.
 
 ## Getting Started
 
+Coming later.
 
 ## Demo
 
