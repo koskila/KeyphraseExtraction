@@ -34,8 +34,8 @@ namespace KeywordWebhookReceiver
         /// <summary>
         /// If you uncomment the row below, the cognitive services part of the code will revert to test/dev mode
         /// </summary>
-        private static readonly string[] terms = new string[] { "test term 4", "test term 1" };
-        //private static readonly string[] terms = new string[] { };
+        //private static readonly string[] terms = new string[] { "test term 4", "test term 1" };
+        private static readonly string[] terms = new string[] { };
 
         private static int lcid = 1033;
         /// <summary>
@@ -214,7 +214,7 @@ namespace KeywordWebhookReceiver
                         }
                         else
                         {
-                            return req.CreateResponse(HttpStatusCode.OK, "File was not pdf");
+                            return req.CreateResponse(HttpStatusCode.OK, "File was not pdf or doc");
                         }
 
                         return req.CreateResponse(HttpStatusCode.OK, list.Id);
