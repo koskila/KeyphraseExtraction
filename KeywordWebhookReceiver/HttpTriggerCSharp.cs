@@ -148,6 +148,8 @@ namespace KeywordWebhookReceiver
 
                                             List<MultiLanguageInput> analyzable = FormatAnalyzableText(ref text);
 
+                                            log.Info("Formed altogether " + analyzable.Count + " sentences to analyze!");
+
                                             int snippetEnd = 500 < text.Length ? 500 : text.Length;
                                             log.Info("Extracted text! First few rows here.. \r\n " + text.Substring(0, snippetEnd));
 
@@ -273,7 +275,7 @@ namespace KeywordWebhookReceiver
             string sentenceCandidate = "";
             foreach (var sentence in sentences)
             {
-                // sanitize
+                // SANITIZE AND SPLIT
 
                 // drop short sentences (they'll be like "et al", one-liners like "go figure" or just "."
                 if (sentence.Length < 10) continue;
