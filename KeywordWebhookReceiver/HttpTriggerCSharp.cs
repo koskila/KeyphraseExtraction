@@ -159,8 +159,8 @@ namespace KeywordWebhookReceiver
                                             }
                                         }
 
-                                        log.Info("All found key phrases were: ");
-                                        foreach (var kp in keyPhrases)
+                                        log.Info("Found " + keyPhrases.Count + " key phrases! First 20 are here: ");
+                                        foreach (var kp in keyPhrases.Take(20))
                                         {
                                             log.Info(kp);
                                         }
