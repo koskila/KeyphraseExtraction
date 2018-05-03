@@ -7,6 +7,7 @@
     "CognitiveServicesAPIkey": "",
     "SPO_UserName": "koskila@simedev.onmicrosoft.com",
     "SPO_Password": "",
-    "SPO_ListName": "Documents"
+    "SPO_ListName": "Documents",
+    "AccuracyLevel": 0 // 0 = minimal resource consumption, 1 = a compromise, 2 = maximal accuracy
   }
 }

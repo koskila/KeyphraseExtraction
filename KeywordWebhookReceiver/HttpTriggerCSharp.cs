@@ -31,6 +31,8 @@ namespace KeywordWebhookReceiver
         public static readonly string password = System.Configuration.ConfigurationManager.AppSettings["SPO_Password"];
         public static readonly string listName = System.Configuration.ConfigurationManager.AppSettings["SPO_ListName"];
 
+        public static readonly int _accuracyLevel = int.Parse(System.Configuration.ConfigurationManager.AppSettings["AccuracyLevel"]);
+
         /// <summary>
         /// If you uncomment the row below, the cognitive services part of the code will revert to test/dev mode
         /// </summary>
@@ -256,6 +258,16 @@ namespace KeywordWebhookReceiver
             var RegEx_SentenceDelimiter = new Regex(@"(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\?)\s");
             sentences = RegEx_SentenceDelimiter.Split(text).ToList();
 
+            // figure out, which sentence length we're using based on set accuracylevel. The default value is 5120 (set by the API)
+            int limit;
+            if (_accuracyLevel == 0) limit = 5120;
+            else if (_accuracyLevel == 1) limit = 2560;
+            else if (_accuracyLevel == 2) limit = 640; // please note, that this causes a roughly 8-fold increase in quota consumption!
+            else
+            {
+                throw new ArgumentOutOfRangeException("AccuracyLevel", "Internal parameter _accuracyLevel was not valid. Expected (int)0-2, but was " + _accuracyLevel + ". Please check your Application Settings (properties) configuration, or settings.json file!");
+            }
+
             List<string> finalizedSentences = new List<string>();
 
             string sentenceCandidate = "";
@@ -267,7 +279,7 @@ namespace KeywordWebhookReceiver
                 if (sentence.Length < 10) continue;
 
                 // combine or add other sentences
-                if (sentenceCandidate.Length + sentence.Length > 5120)
+                if (sentenceCandidate.Length + sentence.Length > limit)
                 {
                     finalizedSentences.Add(sentenceCandidate);
                     sentenceCandidate = sentence;
