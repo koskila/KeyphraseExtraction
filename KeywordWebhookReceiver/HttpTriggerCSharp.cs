@@ -24,7 +24,6 @@ namespace KeywordWebhookReceiver
     public static class HttpTriggerCSharp
     {
         public static readonly string siteUrl = System.Configuration.ConfigurationManager.AppSettings["SiteUrl"];
-        // These keys are for posti@koskila.net
         public static readonly string key1 = System.Configuration.ConfigurationManager.AppSettings["CognitiveServicesAPIkey"];
 
         public static readonly string userName = System.Configuration.ConfigurationManager.AppSettings["SPO_UserName"];
@@ -33,11 +32,11 @@ namespace KeywordWebhookReceiver
 
         public static readonly int _accuracyLevel = int.Parse(System.Configuration.ConfigurationManager.AppSettings["AccuracyLevel"]);
 
-        /// <summary>
-        /// If you uncomment the row below, the cognitive services part of the code will revert to test/dev mode
-        /// </summary>
         private static readonly string[] terms = new string[] { };
 
+        /// <summary>
+        /// We could parse this one from the source material, too. Maybe even from the SharePoint site? For this demo, it'll be hardcoded, though.
+        /// </summary>
         private static int lcid = 1033;
 
         /// <summary>
@@ -50,10 +49,6 @@ namespace KeywordWebhookReceiver
         public static async Task<HttpResponseMessage> Run([HttpTrigger(AuthorizationLevel.Anonymous, "get", "post", Route = null)]HttpRequestMessage req, TraceWriter log)
         {
             string message = "";
-            string str = "C# HTTP trigger function processed a request.";
-            log.Info("====================================");
-            log.Info(str);
-            message += str;
 
             List<string> keyPhrases = new List<string>();
 
