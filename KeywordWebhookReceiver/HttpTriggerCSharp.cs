@@ -36,10 +36,10 @@ namespace KeywordWebhookReceiver
         /// <summary>
         /// If you uncomment the row below, the cognitive services part of the code will revert to test/dev mode
         /// </summary>
-        //private static readonly string[] terms = new string[] { "test term 4", "test term 1" };
         private static readonly string[] terms = new string[] { };
 
         private static int lcid = 1033;
+
         /// <summary>
         /// Guid of the termset used by our custom Keywords -field
         /// </summary>
@@ -55,19 +55,6 @@ namespace KeywordWebhookReceiver
             log.Info(str);
             message += str;
 
-            // parse query parameter
-            string name = req.GetQueryNameValuePairs()
-                .FirstOrDefault(q => string.Compare(q.Key, "name", true) == 0)
-                .Value;
-
-            string id = req.GetQueryNameValuePairs()
-                .FirstOrDefault(q => string.Compare(q.Key, "id", true) == 0)
-                .Value;
-
-            string link = req.GetQueryNameValuePairs()
-                .FirstOrDefault(q => string.Compare(q.Key, "link", true) == 0)
-                .Value;
-
             List<string> keyPhrases = new List<string>();
 
             string description = "";
@@ -75,15 +62,7 @@ namespace KeywordWebhookReceiver
             // Get request body
             dynamic data = await req.Content.ReadAsAsync<object>();
 
-            try
-            {
-                link = data.link;
-            }
-            catch (Exception ex)
-            { 
-                log.Info(ex.Message);
-                //throw;
-            }
+            string id = data.ID;
 
             log.Info("Document id: " + id);
             message += "Document id: " + id;
@@ -118,91 +97,76 @@ namespace KeywordWebhookReceiver
 
                             log.Info("It was a valid file! Continuing into handling...");
 
-                            using (System.IO.MemoryStream mStream = new System.IO.MemoryStream())
+                            
+                            try
                             {
+                                log.Info("Got a file! Name: " + li.File.Name);
+
+
+                                var fileRef = li.File.ServerRelativeUrl;
+                                var fileInfo = Microsoft.SharePoint.Client.File.OpenBinaryDirect(ctx, fileRef);
+                                fileInfo = Microsoft.SharePoint.Client.File.OpenBinaryDirect(ctx, fileRef);
+
+                                using (var ms = new MemoryStream())
+                                {
+                                    log.Info("Extracting text..");
+
+                                    fileInfo.Stream.CopyTo(ms);
+                                    byte[] fileContents = ms.ToArray();
+
+                                    var extractor = new TikaOnDotNet.TextExtraction.TextExtractor();
+                                    var extractionResult = extractor.Extract(fileContents);
+                                    string text = extractionResult.Text;
+
+                                    List<MultiLanguageInput> analyzable = FormatAnalyzableText(ref text);
+
+                                    log.Info("Formed altogether " + analyzable.Count + " sentences to analyze!");
+
+                                    int snippetEnd = 500 < text.Length ? 500 : text.Length;
+                                    log.Info("Extracted text! First few rows here.. \r\n " + text.Substring(0, snippetEnd));
+
+                                    
+                                    RunTextAnalysis(ref keyPhrases, analyzable, log);
+                                    
+                                }
+
+                                log.Info("Found " + keyPhrases.Count + " key phrases! First 20 are here: ");
+                                foreach (var kp in keyPhrases.Take(20))
+                                {
+                                    log.Info(kp);
+                                }
+                                    
+
                                 try
                                 {
-                                    log.Info("Got a file!" + li.File.Name);
+                                    log.Info("Saving to SharePoint..");
+                                    TextInfo ti = new CultureInfo("en-US", false).TextInfo;
 
-                                    // if "terms" has values, revert to test mode
-                                    if (terms.Length > 0)
+                                    li["Title"] = ti.ToTitleCase(li.File.Name);
+
+                                    // then write the most important keyphrases back
+                                    foreach (var s in keyPhrases.Take(keywordCount))
                                     {
-                                        keyPhrases.AddRange(terms);
+                                        description += s + "\r\n";
                                     }
-                                    else
-                                    { 
-                                        var fileRef = li.File.ServerRelativeUrl;
-                                        var fileInfo = Microsoft.SharePoint.Client.File.OpenBinaryDirect(ctx, fileRef);
-                                        fileInfo = Microsoft.SharePoint.Client.File.OpenBinaryDirect(ctx, fileRef);
 
-                                        using (var ms = new MemoryStream())
-                                        {
-                                            log.Info("Extracting text..");
-
-                                            fileInfo.Stream.CopyTo(ms);
-                                            byte[] fileContents = ms.ToArray();
-
-                                            var extractor = new TikaOnDotNet.TextExtraction.TextExtractor();
-                                            var extractionResult = extractor.Extract(fileContents);
-                                            string text = extractionResult.Text;
-
-                                            List<MultiLanguageInput> analyzable = FormatAnalyzableText(ref text);
-
-                                            log.Info("Formed altogether " + analyzable.Count + " sentences to analyze!");
-
-                                            int snippetEnd = 500 < text.Length ? 500 : text.Length;
-                                            log.Info("Extracted text! First few rows here.. \r\n " + text.Substring(0, snippetEnd));
-
-                                            if (keyPhrases.Count <= 0)
-                                            {
-                                                RunTextAnalysis(ref keyPhrases, analyzable, log);
-                                            }
-                                        }
-
-                                        log.Info("Found " + keyPhrases.Count + " key phrases! First 20 are here: ");
-                                        foreach (var kp in keyPhrases.Take(20))
-                                        {
-                                            log.Info(kp);
-                                        }
-                                    }
+                                    li.Update();
 
                                     try
                                     {
-                                        log.Info("Saving to SharePoint..");
-                                        TextInfo ti = new CultureInfo("en-US", false).TextInfo;
+                                        ctx.Load(list.Fields);
+                                        ctx.ExecuteQuery();
 
-                                        li["Title"] = ti.ToTitleCase(li.File.Name);
+                                        log.Info("Updating Managed Metadata...");
 
-                                        // then write the most important keyphrases back
-                                        foreach (var s in keyPhrases.Take(keywordCount))
-                                        {
-                                            description += s + "\r\n";
-                                        }
-                                        // We could parse description text the keyphrases, but let's skip that 
-                                        //li["Description0"] = ti.ToTitleCase(description.ToLower());
+                                        var fieldnames = new string[] { "Keywords" };
+                                        var field = list.GetFields(fieldnames).First();
 
-                                        li.Update();
+                                        // setting managed metadata
+                                        log.Info("Updating keywords to taxonomy! Taking: " + keywordCount);
+                                        UpdateManagedMetadata(keyPhrases.Take(keywordCount).ToArray(), log, ctx, li, field, wantedGuid);
 
-                                        try
-                                        {
-                                            ctx.Load(list.Fields);
-                                            ctx.ExecuteQuery();
-
-                                            log.Info("Updating Managed Metadata...");
-
-                                            var fieldnames = new string[] { "Keywords" };
-                                            var field = list.GetFields(fieldnames).First();
-
-                                            // setting managed metadata
-                                            log.Info("Updating keywords to taxonomy! Taking: " + keywordCount);
-                                            UpdateManagedMetadata(keyPhrases.Take(keywordCount).ToArray(), log, ctx, li, field, wantedGuid);
-
-                                            ctx.ExecuteQuery();
-                                        }
-                                        catch (Exception ex)
-                                        {
-                                            log.Error(ex.Message);
-                                        }
+                                        ctx.ExecuteQuery();
                                     }
                                     catch (Exception ex)
                                     {
@@ -212,9 +176,14 @@ namespace KeywordWebhookReceiver
                                 catch (Exception ex)
                                 {
                                     log.Error(ex.Message);
-                                    return req.CreateResponse(HttpStatusCode.InternalServerError, ex.Message);
                                 }
                             }
+                            catch (Exception ex)
+                            {
+                                log.Error(ex.Message);
+                                return req.CreateResponse(HttpStatusCode.InternalServerError, ex.Message);
+                            }
+                            
                         }
                         else
                         {
@@ -241,7 +210,7 @@ namespace KeywordWebhookReceiver
             var returnable = JsonConvert.SerializeObject(keyPhrases);
 
             return keyPhrases.Count <= 0
-                ? req.CreateResponse(HttpStatusCode.BadRequest, "Please pass a name on the query string or in the request body")
+                ? req.CreateResponse(HttpStatusCode.BadRequest, "Couldn't analyze file. Please verify the POST payload!")
                 : req.CreateResponse(HttpStatusCode.OK, returnable);
         }
 
@@ -306,6 +275,12 @@ namespace KeywordWebhookReceiver
             return analyzable;
         }
 
+        /// <summary>
+        /// Adds found key phrases to references list of keyPhrases - the most important ones first.
+        /// </summary>
+        /// <param name="keyPhrases"></param>
+        /// <param name="analyzable"></param>
+        /// <param name="log"></param>
         private static void RunTextAnalysis(ref List<string> keyPhrases, List<MultiLanguageInput> analyzable, TraceWriter log)
         {
             var batch = new MultiLanguageBatchInput();
