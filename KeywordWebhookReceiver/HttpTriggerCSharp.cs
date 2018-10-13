@@ -347,7 +347,7 @@ namespace KeywordWebhookReceiver
                 ctx.Load(taxField);
                 ctx.ExecuteQuery();
 
-                foreach (var arrayItem in values.Reverse())
+                foreach (var arrayItem in values)
                 {
                     Term term1 = null;
                     Guid termGuid = Guid.Empty;
