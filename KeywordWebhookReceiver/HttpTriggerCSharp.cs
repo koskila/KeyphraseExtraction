@@ -80,8 +80,6 @@ namespace KeywordWebhookReceiver
                         ctx.Load(li.File);
                         ctx.ExecuteQuery();
 
-                        ctx.ExecuteQuery();
-
                         // We CAN extract text out of most documents with the library, but for this demo I'm limiting our options to these 2 that I know to be working :)
                         if (li.File.Name.IndexOf(".pdf") >= 0 || li.File.Name.IndexOf(".doc") >= 0)
                         {
